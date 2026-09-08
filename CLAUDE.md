@@ -15,7 +15,7 @@ myblog —— 个人博客系统，前后端一体的 Next.js 应用，包含两
 
 - Next.js（App Router）+ TypeScript
 - Tailwind CSS（响应式）
-- SQLite + Drizzle ORM
+- PostgreSQL（Neon 托管，`@neondatabase/serverless`）
 - 认证：httpOnly Cookie 会话 + bcrypt 密码哈希
 - Markdown：react-markdown + remark-gfm + rehype-highlight + rehype-sanitize
 - 表单校验：zod
@@ -27,9 +27,7 @@ npm run dev          # 开发服务器
 npm run build        # 生产构建
 npm run start        # 生产启动
 npm run lint         # 代码检查
-npm run db:generate  # 生成 Drizzle 迁移
-npm run db:migrate   # 执行迁移
-npm run db:seed      # 初始化种子数据（admin 账号）
+npm run db:seed      # 初始化数据库（建表 + admin 账号 + 示例文章，需 DATABASE_URL）
 ```
 
 ## 目录结构

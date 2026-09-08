@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const post = getPostBySlug(slug);
+  const post = await getPostBySlug(slug);
   if (!post || post.status !== 'published') {
     return { title: '文章不存在' };
   }
@@ -17,10 +17,10 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function PostPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const post = getPostBySlug(slug);
+  const post = await getPostBySlug(slug);
   if (!post || post.status !== 'published') notFound();
 
-  const { posts } = getPublishedPosts(1, 100000);
+  const { posts } = await getPublishedPosts(1, 100000);
   const idx = posts.findIndex((p) => p.id === post.id);
   const prev = idx > 0 ? posts[idx - 1] : null;
   const next = idx >= 0 && idx < posts.length - 1 ? posts[idx + 1] : null;

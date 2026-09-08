@@ -1,6 +1,6 @@
-import { DatabaseSync } from 'node:sqlite';
-import fs from 'node:fs';
-import path from 'node:path';
+import { Pool } from '@neondatabase/serverless';
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 export type PostStatus = 'published' | 'draft';
 
@@ -41,229 +41,160 @@ export interface PostInput {
   status: PostStatus;
 }
 
-const dataDir = path.join(process.cwd(), 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-
-const dbPath = process.env.DATABASE_PATH || path.join(dataDir, 'blog.db');
-const db = new DatabaseSync(dbPath);
-
-db.exec(`
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
-
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS posts (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  slug TEXT NOT NULL UNIQUE,
-  title TEXT NOT NULL,
-  summary TEXT,
-  content TEXT NOT NULL,
-  tags TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'draft',
-  published_at TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS about (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  avatar TEXT NOT NULL DEFAULT '',
-  bio TEXT NOT NULL DEFAULT '',
-  contact TEXT NOT NULL DEFAULT '',
-  social_links TEXT NOT NULL DEFAULT '[]',
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-`);
-
 function asPost(row: unknown): Post {
   return row as Post;
 }
 
-export function getPublishedPosts(
+export async function getPublishedPosts(
   page = 1,
   pageSize = 10,
   tag?: string,
-): { posts: Post[]; total: number } {
+): Promise<{ posts: Post[]; total: number }> {
   const conditions: string[] = ["status = 'published'"];
-  const params: string[] = [];
-
+  const values: unknown[] = [];
   if (tag) {
-    conditions.push("(',' || tags || ',') LIKE ?");
-    params.push(`%,${tag},%`);
+    values.push(tag);
+    conditions.push(`(',' || tags || ',') LIKE '%' || $${values.length} || ',%'`);
   }
-
   const where = `WHERE ${conditions.join(' AND ')}`;
-  const { c } = db.prepare(`SELECT COUNT(*) AS c FROM posts ${where}`).get(...params) as { c: number };
-  const total = Number(c);
+
+  const countRes = await pool.query(`SELECT COUNT(*)::int AS c FROM posts ${where}`, values);
+  const total = Number(countRes.rows[0].c);
 
   const offset = (page - 1) * pageSize;
-  const rows = db
-    .prepare(
-      `SELECT * FROM posts ${where}
-       ORDER BY COALESCE(published_at, created_at) DESC, id DESC
-       LIMIT ? OFFSET ?`,
-    )
-    .all(...params, pageSize, offset);
-
-  return { posts: rows.map(asPost), total };
+  const limitIdx = values.length + 1;
+  const offsetIdx = values.length + 2;
+  const res = await pool.query(
+    `SELECT * FROM posts ${where}
+     ORDER BY COALESCE(published_at, created_at) DESC, id DESC
+     LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+    [...values, pageSize, offset],
+  );
+  return { posts: res.rows.map(asPost), total };
 }
 
-export function getAdminPosts(
+export async function getAdminPosts(
   page = 1,
   pageSize = 10,
   q?: string,
   status?: PostStatus | '',
-): { posts: Post[]; total: number } {
+): Promise<{ posts: Post[]; total: number }> {
   const conditions: string[] = [];
-  const params: string[] = [];
-
+  const values: unknown[] = [];
   if (q) {
-    conditions.push('title LIKE ?');
-    params.push(`%${q}%`);
+    values.push(`%${q}%`);
+    conditions.push(`title ILIKE $${values.length}`);
   }
   if (status) {
-    conditions.push('status = ?');
-    params.push(status);
+    values.push(status);
+    conditions.push(`status = $${values.length}`);
   }
-
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-  const { c } = db.prepare(`SELECT COUNT(*) AS c FROM posts ${where}`).get(...params) as { c: number };
-  const total = Number(c);
+
+  const countRes = await pool.query(`SELECT COUNT(*)::int AS c FROM posts ${where}`, values);
+  const total = Number(countRes.rows[0].c);
 
   const offset = (page - 1) * pageSize;
-  const rows = db
-    .prepare(`SELECT * FROM posts ${where} ORDER BY id DESC LIMIT ? OFFSET ?`)
-    .all(...params, pageSize, offset);
-
-  return { posts: rows.map(asPost), total };
+  const limitIdx = values.length + 1;
+  const offsetIdx = values.length + 2;
+  const res = await pool.query(
+    `SELECT * FROM posts ${where} ORDER BY id DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+    [...values, pageSize, offset],
+  );
+  return { posts: res.rows.map(asPost), total };
 }
 
-export function getPostBySlug(slug: string): Post | null {
-  const row = db.prepare('SELECT * FROM posts WHERE slug = ?').get(slug);
-  return row ? asPost(row) : null;
+export async function getPostBySlug(slug: string): Promise<Post | null> {
+  const res = await pool.query('SELECT * FROM posts WHERE slug = $1', [slug]);
+  return res.rows.length ? asPost(res.rows[0]) : null;
 }
 
-export function getPostById(id: number): Post | null {
-  const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(id);
-  return row ? asPost(row) : null;
+export async function getPostById(id: number): Promise<Post | null> {
+  const res = await pool.query('SELECT * FROM posts WHERE id = $1', [id]);
+  return res.rows.length ? asPost(res.rows[0]) : null;
 }
 
-export function createPost(input: PostInput): Post {
+export async function createPost(input: PostInput): Promise<Post> {
   const publishedAt = input.status === 'published' ? new Date().toISOString() : null;
-  const result = db
-    .prepare(
-      `INSERT INTO posts (slug, title, summary, content, tags, status, published_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      input.slug,
-      input.title,
-      input.summary,
-      input.content,
-      input.tags,
-      input.status,
-      publishedAt,
-    );
-  const id = Number(result.lastInsertRowid);
-  return getPostById(id)!;
+  const res = await pool.query(
+    `INSERT INTO posts (slug, title, summary, content, tags, status, published_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [input.slug, input.title, input.summary, input.content, input.tags, input.status, publishedAt],
+  );
+  return asPost(res.rows[0]);
 }
 
-export function updatePost(id: number, input: PostInput): Post | null {
-  const existing = getPostById(id);
+export async function updatePost(id: number, input: PostInput): Promise<Post | null> {
+  const existing = await getPostById(id);
   if (!existing) return null;
 
-  let publishedAt = existing.published_at;
+  let publishedAt: string | null = existing.published_at as string | null;
   if (input.status === 'published' && !publishedAt) {
     publishedAt = new Date().toISOString();
   } else if (input.status === 'draft') {
     publishedAt = null;
   }
 
-  db.prepare(
+  const res = await pool.query(
     `UPDATE posts
-     SET slug = ?, title = ?, summary = ?, content = ?, tags = ?, status = ?, published_at = ?, updated_at = datetime('now')
-     WHERE id = ?`,
-  ).run(
-    input.slug,
-    input.title,
-    input.summary,
-    input.content,
-    input.tags,
-    input.status,
-    publishedAt,
-    id,
+     SET slug = $1, title = $2, summary = $3, content = $4, tags = $5, status = $6, published_at = $7, updated_at = now()
+     WHERE id = $8 RETURNING *`,
+    [input.slug, input.title, input.summary, input.content, input.tags, input.status, publishedAt, id],
   );
-  return getPostById(id);
+  return asPost(res.rows[0]);
 }
 
-export function deletePost(id: number): void {
-  db.prepare('DELETE FROM posts WHERE id = ?').run(id);
+export async function deletePost(id: number): Promise<void> {
+  await pool.query('DELETE FROM posts WHERE id = $1', [id]);
 }
 
-export function getStats(): Stats {
-  const total = Number((db.prepare('SELECT COUNT(*) AS c FROM posts').get() as { c: number }).c);
-  const published = Number(
-    (db.prepare("SELECT COUNT(*) AS c FROM posts WHERE status = 'published'").get() as { c: number }).c,
-  );
-  const draft = Number(
-    (db.prepare("SELECT COUNT(*) AS c FROM posts WHERE status = 'draft'").get() as { c: number }).c,
-  );
-  const monthNew = Number(
-    (
-      db
-        .prepare(
-          "SELECT COUNT(*) AS c FROM posts WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')",
-        )
-        .get() as { c: number }
-    ).c,
-  );
-  return { total, published, draft, monthNew };
+export async function getStats(): Promise<Stats> {
+  const res = await pool.query(`
+    SELECT
+      COUNT(*)::int AS total,
+      COUNT(*) FILTER (WHERE status = 'published')::int AS published,
+      COUNT(*) FILTER (WHERE status = 'draft')::int AS draft,
+      COUNT(*) FILTER (WHERE date_trunc('month', created_at) = date_trunc('month', now()))::int AS monthnew
+    FROM posts
+  `);
+  const r = res.rows[0];
+  return { total: r.total, published: r.published, draft: r.draft, monthNew: r.monthnew };
 }
 
-export function getAbout(): AboutData {
-  let row = db.prepare('SELECT * FROM about WHERE id = 1').get() as unknown as AboutData | undefined;
-  if (!row) {
-    db.prepare('INSERT INTO about (id) VALUES (1)').run();
-    row = db.prepare('SELECT * FROM about WHERE id = 1').get() as unknown as AboutData;
+export async function getAbout(): Promise<AboutData> {
+  let res = await pool.query('SELECT * FROM about WHERE id = 1');
+  if (res.rows.length === 0) {
+    await pool.query(`INSERT INTO about (id) VALUES (1) ON CONFLICT (id) DO NOTHING`);
+    res = await pool.query('SELECT * FROM about WHERE id = 1');
   }
-  return row;
+  return res.rows[0] as AboutData;
 }
 
-export function updateAbout(input: {
+export async function updateAbout(input: {
   avatar: string;
   bio: string;
   contact: string;
   social_links: string;
-}): AboutData {
-  db.prepare(
+}): Promise<AboutData> {
+  await pool.query(
     `INSERT INTO about (id, avatar, bio, contact, social_links, updated_at)
-     VALUES (1, ?, ?, ?, ?, datetime('now'))
-     ON CONFLICT(id) DO UPDATE SET
-       avatar = excluded.avatar,
-       bio = excluded.bio,
-       contact = excluded.contact,
-       social_links = excluded.social_links,
-       updated_at = datetime('now')`,
-  ).run(input.avatar, input.bio, input.contact, input.social_links);
+     VALUES (1, $1, $2, $3, $4, now())
+     ON CONFLICT (id) DO UPDATE SET
+       avatar = EXCLUDED.avatar,
+       bio = EXCLUDED.bio,
+       contact = EXCLUDED.contact,
+       social_links = EXCLUDED.social_links,
+       updated_at = now()`,
+    [input.avatar, input.bio, input.contact, input.social_links],
+  );
   return getAbout();
 }
 
-export function getUserByUsername(username: string) {
-  return db.prepare('SELECT * FROM users WHERE username = ?').get(username) as
-    | { id: number; username: string; password_hash: string }
-    | undefined;
+export async function getUserByUsername(username: string) {
+  const res = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+  return res.rows[0] as { id: number; username: string; password_hash: string } | undefined;
 }
 
-export function updateUserPassword(username: string, hash: string): void {
-  db.prepare('UPDATE users SET password_hash = ? WHERE username = ?').run(hash, username);
+export async function updateUserPassword(username: string, hash: string): Promise<void> {
+  await pool.query('UPDATE users SET password_hash = $1 WHERE username = $2', [hash, username]);
 }
-
-export default db;

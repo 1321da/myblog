@@ -16,8 +16,8 @@ function StatCard({ label, value }: { label: string; value: number }) {
 }
 
 export default async function DashboardPage() {
-  const stats = getStats();
-  const { posts } = getAdminPosts(1, 5);
+  const stats = await getStats();
+  const { posts } = await getAdminPosts(1, 5);
 
   return (
     <div className="space-y-8">

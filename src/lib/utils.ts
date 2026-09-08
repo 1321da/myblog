@@ -45,9 +45,9 @@ function normalizeDate(s: string): Date {
   return new Date(s);
 }
 
-export function formatDate(iso: string | null): string {
+export function formatDate(iso: string | Date | null): string {
   if (!iso) return '';
-  const d = normalizeDate(iso);
+  const d = iso instanceof Date ? iso : normalizeDate(iso);
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
 }

@@ -32,12 +32,12 @@ export async function POST(req: Request) {
   let slug = (d.slug?.trim() || slugify(d.title)).replace(/\s+/g, '-');
   let finalSlug = slug;
   let i = 2;
-  while (getPostBySlug(finalSlug)) {
+  while (await getPostBySlug(finalSlug)) {
     finalSlug = `${slug}-${i++}`;
   }
 
   const summary = d.summary?.trim() ? d.summary.trim() : makeSummary(d.content);
-  const post = createPost({
+  const post = await createPost({
     slug: finalSlug,
     title: d.title.trim(),
     summary,

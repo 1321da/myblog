@@ -5,7 +5,7 @@
 ## 1. 技术选型
 - 框架：Next.js（App Router）+ TypeScript
 - 样式：Tailwind CSS
-- 数据库：SQLite + Drizzle ORM
+- 数据库：PostgreSQL（Neon 托管，@neondatabase/serverless）
 - 认证：httpOnly Cookie 会话 + bcrypt
 - Markdown：react-markdown + remark-gfm + rehype-highlight + rehype-sanitize
 - 表单校验：zod

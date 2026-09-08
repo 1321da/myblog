@@ -17,7 +17,7 @@ export default async function TagPage({
   const decoded = decodeURIComponent(tag);
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page) || 1);
-  const { posts, total } = getPublishedPosts(page, PAGE_SIZE, decoded);
+  const { posts, total } = await getPublishedPosts(page, PAGE_SIZE, decoded);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (

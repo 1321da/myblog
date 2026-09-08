@@ -29,7 +29,7 @@ export default async function AdminPostsPage({
   const q = sp.q ?? '';
   const status = sp.status === 'published' || sp.status === 'draft' ? sp.status : '';
 
-  const { posts, total } = getAdminPosts(page, PAGE_SIZE, q || undefined, status || undefined);
+  const { posts, total } = await getAdminPosts(page, PAGE_SIZE, q || undefined, status || undefined);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (

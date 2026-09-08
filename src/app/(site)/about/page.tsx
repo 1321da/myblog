@@ -5,8 +5,8 @@ export const dynamic = 'force-dynamic';
 
 export const metadata = { title: '关于我' };
 
-export default function AboutPage() {
-  const about = getAbout();
+export default async function AboutPage() {
+  const about = await getAbout();
 
   let socials: { label: string; url: string }[] = [];
   try {

@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   }
 
   const { username, password } = parsed.data;
-  const user = getUserByUsername(username);
+  const user = await getUserByUsername(username);
   if (!user) {
     return NextResponse.json({ error: '账号或密码错误' }, { status: 401 });
   }

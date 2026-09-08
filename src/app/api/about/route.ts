@@ -22,7 +22,7 @@ export async function PUT(req: Request) {
     ? parsed.data
     : { avatar: '', bio: '', contact: '', social_links: '[]' };
 
-  const about = updateAbout({
+  const about = await updateAbout({
     avatar: d.avatar,
     bio: d.bio,
     contact: d.contact,

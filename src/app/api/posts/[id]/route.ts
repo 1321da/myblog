@@ -24,7 +24,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (!Number.isInteger(postId)) {
     return NextResponse.json({ error: '无效的文章 ID' }, { status: 400 });
   }
-  if (!getPostById(postId)) {
+  if (!(await getPostById(postId))) {
     return NextResponse.json({ error: '文章不存在' }, { status: 404 });
   }
 
@@ -39,7 +39,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const d = parsed.data;
   const summary = d.summary?.trim() ? d.summary.trim() : makeSummary(d.content);
-  const post = updatePost(postId, {
+  const post = await updatePost(postId, {
     slug: d.slug.trim(),
     title: d.title.trim(),
     summary,
@@ -63,6 +63,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     return NextResponse.json({ error: '无效的文章 ID' }, { status: 400 });
   }
 
-  deletePost(postId);
+  await deletePost(postId);
   return NextResponse.json({ ok: true });
 }

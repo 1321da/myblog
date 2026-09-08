@@ -58,7 +58,7 @@ myblog —— 个人博客系统
 | 决策项 | 结论 |
 |--------|------|
 | 架构 | 动态全栈应用（Next.js + TypeScript） |
-| 数据库 | SQLite + Drizzle ORM |
+| 数据库 | PostgreSQL（Neon 托管） |
 | 评论 | 不需要 |
 | 「关于我」 | 后台可编辑 |
 | 摘要 | 留空自动截取正文前 100 字 |

@@ -8,7 +8,7 @@ export const metadata = { title: '编辑文章' };
 
 export default async function EditPostPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const post = getPostById(Number(id));
+  const post = await getPostById(Number(id));
   if (!post) notFound();
 
   return (
